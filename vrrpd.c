@@ -49,6 +49,7 @@ typedef unsigned char u8;
 #include "vrrpd.h"
 #include "ipaddr.h"
 
+static int vrrp_send_adv_with_raw_sock( vrrp_rt *vsrv, int prio );
 int ip_id = 0;	/* to have my own ip_id creates collision with kernel ip->id
 		** but it should be ok because the packets are unlikely to be
 		** fragmented (they are non routable and small) */
@@ -784,6 +785,9 @@ void hello_send_pkt(vrrp_rt *vsrv, int addr)
 ****************************************************************/
 static int vrrp_send_adv( vrrp_rt *vsrv, int prio )
 {
+#ifdef VRRPD_VARIANT_SEND_USING_AF_INET
+	return vrrp_send_adv_with_raw_sock(vsrv,prio);
+#else
 	int	buflen, ret;
 	char *	buffer;
 #if 0	/* just for debug */
@@ -803,6 +807,7 @@ static int vrrp_send_adv( vrrp_rt *vsrv, int prio )
 	free( buffer );
 	return ret;
 
+#endif
 }
 
 
@@ -1789,6 +1794,8 @@ int main( int argc, char *argv[] )
     close(STDOUT_FILENO);
     close(STDERR_FILENO);
 
+	/* Initialize the raw socket fd */
+	vsrv->vrrp_send_sock_fd = -1;
 	if( open_sock( vsrv ) ){
 		return -1;
 	}
@@ -1819,5 +1826,187 @@ int main( int argc, char *argv[] )
 		}
 	}
 
+	close(vsrv->vrrp_send_sock_fd);
 	return(0);
+}
+
+/*It Is observed that the use of PF_PACKET causes kernel crash The following changes are 
+done in order to prevent this
+*/
+
+/* Send VRRP advertisement using raw socket */
+/****************************************************************
+ NAME	: vrrp_build_raw_IP_pkt
+ AIM	: build a advertissement packet
+ REMARK	:
+****************************************************************/
+static void vrrp_build_raw_IP_pkt( vrrp_rt *vsrv, int prio, char *buffer, int buflen )
+{
+	/* build the ip header */
+	memset(buffer,0,buflen);
+	vrrp_build_ip( vsrv, buffer, buflen );
+	buffer += vrrp_iphdr_len(vsrv);
+	buflen -= vrrp_iphdr_len(vsrv);
+	/* build the vrrp header */
+	vrrp_build_vrrp( vsrv, prio, buffer, buflen );
+}
+
+/****************************************************************
+ NAME	: _include_header				
+ AIM	:
+ REMARK	:
+****************************************************************/
+static int _include_header(int *sockdesc)
+{
+        int ret;
+        int on = 1;
+
+        if (*sockdesc < 0)
+                return -1;
+
+        /* Build IP header into RAW protocol packet */
+        ret = setsockopt(*sockdesc, IPPROTO_IP, IP_HDRINCL, &on, sizeof(on));
+        if (ret < 0) {
+                vrrpd_log(LOG_WARNING, "cant set HDRINCL IP option. errno=%d \n", errno);
+                close(*sockdesc);
+                *sockdesc = -1;
+        }
+
+        return *sockdesc;
+}
+
+/****************************************************************
+ NAME	: _bind_to_interface				
+ AIM	:
+ REMARK	:
+****************************************************************/
+static int _bind_to_interface(int *sockdesc,char *interface)
+{
+        int ret;
+
+       vrrpd_log(LOG_WARNING,"bind to device %s\n",interface);
+
+        if (*sockdesc < 0)
+                return -1;
+
+         if ((ret = setsockopt(*sockdesc, SOL_SOCKET, SO_BINDTODEVICE, (void *)interface, strlen(interface)+1)) < 0)
+         {
+               perror("Server-setsockopt() error for SO_BINDTODEVICE");
+               printf("%s\n", strerror(errno));
+               close(*sockdesc);
+         }
+
+        return *sockdesc;
+}
+
+/****************************************************************
+ NAME	: _set_mcast_loop_option				
+ AIM	:	Sets multicast option and disables loopback 
+ REMARK	:
+****************************************************************/
+static int _set_mcast_loop_option(int *sockdesc)
+{
+        int ret;
+        unsigned char loopback = 0;
+
+        if (*sockdesc < 0)
+                return -1;
+
+        ret = setsockopt(*sockdesc, IPPROTO_IP, IP_MULTICAST_LOOP, &loopback, sizeof(loopback));
+
+        if (ret < 0) {
+                vrrpd_log(LOG_WARNING,"can't set multicast loop option \n");
+                close(*sockdesc);
+                *sockdesc = -1;
+        }
+
+        return *sockdesc;
+}
+
+/****************************************************************
+ NAME	: open_vrrp_send_socket				
+ AIM	: Called once from vrrp_send_raw_IP_pkt() this socket is
+			used till program termination
+ REMARK	:
+****************************************************************/
+static int open_vrrp_send_socket(char *interface)
+{
+        int raw_sock_fd = -1;
+
+        /* Create and init raw socket descriptor */
+        raw_sock_fd = socket(AF_INET, SOCK_RAW, IPPROTO_VRRP);
+        if (raw_sock_fd < 0) {
+                vrrpd_log(LOG_WARNING,"cant open raw socket. errno=%d", errno);
+                return -1;
+        }
+        /* setsockopt for v4 */
+        _include_header(&raw_sock_fd);
+        _bind_to_interface(&raw_sock_fd, interface);
+        _set_mcast_loop_option(&raw_sock_fd);
+        if (raw_sock_fd < 0)
+                        return -1;
+
+        return raw_sock_fd;
+}
+
+/****************************************************************
+ NAME	: vrrp_send_raw_IP_pkt				
+ AIM	: Called from vrrp_send_adv_with_raw_sock() sends VRRP 
+			advertisement 
+ REMARK	:
+****************************************************************/
+static int vrrp_send_raw_IP_pkt( vrrp_rt *vsrv, char *buffer, int buflen )
+{
+       struct sockaddr_in dst4;
+       struct msghdr msg;
+       struct iovec iov;
+
+       if (vsrv->vrrp_send_sock_fd==-1)
+       {
+            vrrpd_log(LOG_WARNING,"create raw socket\n");
+            vsrv->vrrp_send_sock_fd=open_vrrp_send_socket(vsrv->vif.ifname);
+            if (vsrv->vrrp_send_sock_fd ==-1)
+            {
+                vrrpd_log(LOG_WARNING,"open raw socket failure\n");
+                exit(1);
+            }
+       }
+
+        /* Build the message data */
+        memset(&msg, 0, sizeof(msg));
+        msg.msg_iov = &iov;
+        msg.msg_iovlen = 1;
+        iov.iov_base = buffer;
+        iov.iov_len = buflen;
+
+        memset(&dst4, 0, sizeof(dst4));
+        dst4.sin_family = AF_INET;
+        dst4.sin_addr.s_addr = htonl(INADDR_VRRP_GROUP);
+        msg.msg_name = &dst4;
+        msg.msg_namelen = sizeof(dst4);
+     
+        /* Send the packet */
+        return sendmsg(vsrv->vrrp_send_sock_fd, &msg, MSG_DONTROUTE);
+
+
+}
+
+/****************************************************************
+ NAME	: vrrp_send_adv_with_raw_sock				
+ AIM	: Called from vrrp_send_adv() Builds and sends VRRP packet
+			using raw socket implementation
+ REMARK	:
+****************************************************************/
+static int vrrp_send_adv_with_raw_sock( vrrp_rt *vsrv, int prio )
+{
+	int	buflen, ret;
+	char 	buffer[512];
+
+	buflen = vrrp_iphdr_len(vsrv) + vrrp_hd_len(vsrv);
+	/* build the packet  */
+	vrrp_build_raw_IP_pkt( vsrv, prio, buffer, buflen );
+	/* send */
+	ret = vrrp_send_raw_IP_pkt( vsrv, buffer, buflen );
+	return ret;
+
 }

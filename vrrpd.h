@@ -87,7 +87,7 @@ typedef struct {	/* parameters per virtual router -- rfc2338.6.1.2 */
 	int	wantstate;	/* user explicitly wants a state (back/mast) */
 
 	int	sockfd;		/* the socket descriptor */
-	
+	int vrrp_send_sock_fd;      /* new file Descriptor for using raw socket*/
 	int	initF;		/* true if the struct is init */
 	
 	int	no_vmac;	/* dont handle the virtual MAC --rfc2338.7.3 */
