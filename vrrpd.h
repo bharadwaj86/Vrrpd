@@ -1,8 +1,9 @@
 /*==========================[ (c) GURU SOFT ]===================================
 FILE        : [vrrp.h]
-CREATED     : 00/02/02 12:12:06		LAST SAVE    : 00/10/04 21:59:46
+CREATED     : 00/02/02 12:12:06		LAST SAVE    : 12/09/14 11:59:46
 WHO         : jerome@mycpu Linux 2.2.14
 REMARK      :
+			 12/09/14          Added new file Descriptor for Raw Sock send
 ================================================================================
 - This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License
