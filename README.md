@@ -106,10 +106,13 @@ atropos --state			Status
 atropos --version		version 
 It requires to be run as root 
 ```
-
+**Build Options**
+```
 * In order to build Advanced Vrrpd variant with AF_INET send socket option run the following make command
 
 make AFINETOPT=-DVRRPD_VARIANT_SEND_USING_AF_INET
 
 * This will build an executable which uses AF_INET (raw sock) type for send VRRP Advertisement. This prevents possible linux kernel crash which was observed in the old scheme (using AF_PACKET).
 
+To build vrrp without these changes just use "make" command
+```
