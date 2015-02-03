@@ -1830,15 +1830,18 @@ int main( int argc, char *argv[] )
 	return(0);
 }
 
-/*It Is observed that the use of PF_PACKET causes kernel crash The following changes are 
-done in order to prevent this
+/*It Is observed that the use of type AF_PACKET causes embedded linux kernel to crash
+while sending VRRP Advertisements. The following changes are done to use AF_INET instead
+and also create send socket just once instead of repeatedly creating it at every VRRP
+Advertisement to possible crash scenario
 */
 
 /* Send VRRP advertisement using raw socket */
 /****************************************************************
- NAME	: vrrp_build_raw_IP_pkt
- AIM	: build a advertissement packet
- REMARK	:
+ NAME   : vrrp_build_raw_IP_pkt                 12/09/2014
+ AIM    : build a advertissement packet
+ WHO    : Gautham Bharadwaj
+ REMARK :
 ****************************************************************/
 static void vrrp_build_raw_IP_pkt( vrrp_rt *vsrv, int prio, char *buffer, int buflen )
 {
@@ -1852,9 +1855,10 @@ static void vrrp_build_raw_IP_pkt( vrrp_rt *vsrv, int prio, char *buffer, int bu
 }
 
 /****************************************************************
- NAME	: _include_header				
- AIM	:
- REMARK	:
+ NAME   : _include_header                       12/09/2014
+ AIM    :
+ WHO    : Gautham Bharadwaj
+ REMARK :
 ****************************************************************/
 static int _include_header(int *sockdesc)
 {
@@ -1876,9 +1880,10 @@ static int _include_header(int *sockdesc)
 }
 
 /****************************************************************
- NAME	: _bind_to_interface				
- AIM	:
- REMARK	:
+ NAME   : _bind_to_interface                    12/09/2014
+ AIM    :
+ WHO    : Gautham Bharadwaj
+ REMARK :
 ****************************************************************/
 static int _bind_to_interface(int *sockdesc,char *interface)
 {
@@ -1900,9 +1905,10 @@ static int _bind_to_interface(int *sockdesc,char *interface)
 }
 
 /****************************************************************
- NAME	: _set_mcast_loop_option				
- AIM	:	Sets multicast option and disables loopback 
- REMARK	:
+ NAME   : _set_mcast_loop_option                12/09/2014
+ AIM    :  Sets multicast option and disables loopback
+ WHO    : Gautham Bharadwaj
+ REMARK :
 ****************************************************************/
 static int _set_mcast_loop_option(int *sockdesc)
 {
@@ -1924,10 +1930,11 @@ static int _set_mcast_loop_option(int *sockdesc)
 }
 
 /****************************************************************
- NAME	: open_vrrp_send_socket				
- AIM	: Called once from vrrp_send_raw_IP_pkt() this socket is
-			used till program termination
- REMARK	:
+ NAME   : open_vrrp_send_socket                 12/09/2014
+ AIM    : Called once from vrrp_send_raw_IP_pkt() this socket is
+                        used till program termination
+ WHO    : Gautham Bharadwaj
+ REMARK :
 ****************************************************************/
 static int open_vrrp_send_socket(char *interface)
 {
@@ -1950,10 +1957,11 @@ static int open_vrrp_send_socket(char *interface)
 }
 
 /****************************************************************
- NAME	: vrrp_send_raw_IP_pkt				
- AIM	: Called from vrrp_send_adv_with_raw_sock() sends VRRP 
-			advertisement 
- REMARK	:
+ NAME   : vrrp_send_raw_IP_pkt                  12/09/2014
+ AIM    : Called from vrrp_send_adv_with_raw_sock() sends VRRP
+                        advertisement
+ WHO    : Gautham Bharadwaj
+ REMARK :
 ****************************************************************/
 static int vrrp_send_raw_IP_pkt( vrrp_rt *vsrv, char *buffer, int buflen )
 {
@@ -1992,10 +2000,11 @@ static int vrrp_send_raw_IP_pkt( vrrp_rt *vsrv, char *buffer, int buflen )
 }
 
 /****************************************************************
- NAME	: vrrp_send_adv_with_raw_sock				
- AIM	: Called from vrrp_send_adv() Builds and sends VRRP packet
-			using raw socket implementation
- REMARK	:
+ NAME   : vrrp_send_adv_with_raw_sock           12/09/2014
+ AIM    : Called from vrrp_send_adv() Builds and sends VRRP packet
+                        using raw socket implementation
+ WHO    : Gautham Bharadwaj
+ REMARK :
 ****************************************************************/
 static int vrrp_send_adv_with_raw_sock( vrrp_rt *vsrv, int prio )
 {
